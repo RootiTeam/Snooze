@@ -1,14 +1,23 @@
 <?php
 
 /*
- * This file is part of Snooze <https://github.com/pmmp/Snooze>
- * Copyright (c) 2018-2023 PMMP Team
  *
- * Snooze is free software: you can redistribute it and/or modify
+ *  ____            _        _   __  __ _                  __  __ ____
+ * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
+ * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
+ * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/
+ * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_|
+ *
+ * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- */
+ *
+ * @author PocketMine Team
+ * @link http://www.pocketmine.net/
+ *
+ *
+*/
 
 declare(strict_types=1);
 
@@ -27,15 +36,16 @@ class SleeperHandler{
 	 * @var ThreadSafeArray
 	 * @phpstan-var ThreadSafeArray<int, int>
 	 */
-	private readonly ThreadSafeArray $sharedObject;
+	private $sharedObject;
 
 	/**
 	 * @var \Closure[]
 	 * @phpstan-var array<int, \Closure() : void>
 	 */
-	private array $handlers = [];
+	private $notifiers = [];
 
-	private int $nextSleeperId = 0;
+	/** @var int */
+	private $nextSleeperId = 0;
 
 	public function __construct(){
 		$this->sharedObject = new ThreadSafeArray();
@@ -45,21 +55,18 @@ class SleeperHandler{
 	 * @param \Closure $handler Called when the notifier wakes the server up, of the signature `function() : void`
 	 * @phpstan-param \Closure() : void $handler
 	 */
-	public function addNotifier(\Closure $handler) : SleeperHandlerEntry{
+	public function addNotifier(SleeperNotifier $notifier, \Closure $handler) : void{
 		$id = $this->nextSleeperId++;
-		$notifier = new SleeperHandlerEntry($this->sharedObject, $id);
-		$this->handlers[$id] = $handler;
-		return $notifier;
+		$notifier->attachSleeper($this->sharedObject, $id);
+		$this->notifiers[$id] = $handler;
 	}
 
 	/**
-	 * Removes a callback from the sleeper by its ID. Note that this does not prevent the notifier waking the sleeper
-	 * up - it just stops the notifier getting actions processed from the main thread.
-	 *
-	 * @see SleeperHandlerEntry::getNotifierId()
+	 * Removes a notifier from the sleeper. Note that this does not prevent the notifier waking the sleeper up - it just
+	 * stops the notifier getting actions processed from the main thread.
 	 */
-	public function removeNotifier(int $notifierId) : void{
-		unset($this->handlers[$notifierId]);
+	public function removeNotifier(SleeperNotifier $notifier) : void{
+		unset($this->notifiers[$notifier->getSleeperId()]);
 	}
 
 	private function sleep(int $timeout) : void{
@@ -113,11 +120,11 @@ class SleeperHandler{
 				break;
 			}
 			foreach($notifierIds as $notifierId){
-				if(!isset($this->handlers[$notifierId])){
+				if(!isset($this->notifiers[$notifierId])){
 					//a previously-removed notifier might still be sending notifications; ignore them
 					continue;
 				}
-				$this->handlers[$notifierId]();
+				$this->notifiers[$notifierId]();
 			}
 		}
 	}

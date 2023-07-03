@@ -1,44 +1,64 @@
 <?php
 
 /*
- * This file is part of Snooze <https://github.com/pmmp/Snooze>
- * Copyright (c) 2018-2023 PMMP Team
  *
- * Snooze is free software: you can redistribute it and/or modify
+ *  ____            _        _   __  __ _                  __  __ ____
+ * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
+ * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
+ * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/
+ * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_|
+ *
+ * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- */
+ *
+ * @author PocketMine Team
+ * @link http://www.pocketmine.net/
+ *
+ *
+*/
 
 declare(strict_types=1);
 
 namespace pocketmine\snooze;
 
+use pmmp\thread\ThreadSafe;
 use pmmp\thread\ThreadSafeArray;
+use function assert;
 
 /**
- * Used to wake up the sleeping thread from another thread.
- * Use {@link SleeperHandlerEntry::createNotifier()} inside the thread to create this.
+ * Notifiers are Threaded objects which can be attached to threaded sleepers in order to wake them up.
  */
-final class SleeperNotifier{
+class SleeperNotifier extends ThreadSafe{
+	/**
+	 * @var ThreadSafeArray
+	 * @phpstan-var ThreadSafeArray<int, int>
+	 */
+	private $sharedObject;
+
+	/** @var int */
+	private $sleeperId;
 
 	/**
-	 * @internal
-	 * Do not construct this object directly. Use {@link SleeperHandlerEntry::createNotifier()} instead.
-	 *
 	 * @phpstan-param ThreadSafeArray<int, int> $sharedObject
 	 */
-	public function __construct(
-		private readonly ThreadSafeArray $sharedObject,
-		private readonly int $notifierId
-	){}
+	final public function attachSleeper(ThreadSafeArray $sharedObject, int $id) : void{
+		$this->sharedObject = $sharedObject;
+		$this->sleeperId = $id;
+	}
+
+	final public function getSleeperId() : int{
+		return $this->sleeperId;
+	}
 
 	/**
-	 * Call this method to wake up the sleeping thread.
+	 * Call this method from other threads to wake up the main server thread.
 	 */
 	final public function wakeupSleeper() : void{
 		$shared = $this->sharedObject;
-		$sleeperId = $this->notifierId;
+		assert($shared !== null);
+		$sleeperId = $this->sleeperId;
 		$shared->synchronized(function() use ($shared, $sleeperId) : void{
 			if(!isset($shared[$sleeperId])){
 				$shared[$sleeperId] = $sleeperId;
